@@ -1,0 +1,7 @@
+import {validate} from './world.js';
+const allowed=['auto','slot1','slot2','slot3'];
+export function openDB(){return new Promise((resolve,reject)=>{const r=indexedDB.open('sanguo-life-independent-v1',1);r.onupgradeneeded=()=>r.result.createObjectStore('saves');r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error);r.onblocked=()=>reject(Error('資料庫被其他分頁阻擋，請關閉其他遊戲分頁。'));});}
+export async function writeSlot(slot,state){if(!allowed.includes(slot))throw Error('無效存檔槽');const safe=validate(state),db=await openDB();try{await new Promise((resolve,reject)=>{const t=db.transaction('saves','readwrite');t.objectStore('saves').put({savedAt:new Date().toISOString(),state:safe},slot);t.oncomplete=resolve;t.onerror=()=>reject(t.error);t.onabort=()=>reject(t.error??Error('保存已中止'));});}finally{db.close();}}
+export async function readSlot(slot){if(!allowed.includes(slot))throw Error('無效存檔槽');const db=await openDB();try{return await new Promise((resolve,reject)=>{const t=db.transaction('saves'),r=t.objectStore('saves').get(slot);r.onsuccess=()=>{try{resolve(r.result?{...r.result,state:validate(r.result.state)}:null);}catch(e){reject(e);}};r.onerror=()=>reject(r.error);});}finally{db.close();}}
+export function exportJSON(s){return JSON.stringify({format:'sanguo-life-backup',version:1,state:validate(s)},null,2);}
+export function importJSON(text){if(text.length>1000000)throw Error('備份超過1MB上限。');const x=JSON.parse(text);if(x?.format!=='sanguo-life-backup'||x.version!==1)throw Error('不支援的備份版本；未覆蓋目前進度。');return validate(x.state);}
