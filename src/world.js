@@ -1,8 +1,9 @@
-import {createRealm,settleRealm,validateRealm} from './realm.js?v=realm2';
-import {RULES,origins,abilities,cityIds,cities,routes} from './data.js?v=realm2';
+import {rollAbilities,validRolledAbilities} from './abilities.js?v=realm3';
+import {createRealm,settleRealm,validateRealm} from './realm.js?v=realm3';
+import {RULES,origins,abilities,cityIds,cities,routes} from './data.js?v=realm3';
 export const date=t=>`${RULES.startYear+Math.floor(t/36)}年${Math.floor(t%36/3)+1}月${['上','中','下'][t%3]}旬`;
 export const age=(s,p)=>p.initialAge+Math.floor(s.tick/36);
-export function createWorld(input){return createRealm(createLegacyWorld(input));}
+export function createWorld(input){const values=input.abilities??rollAbilities();if(!validRolledAbilities(values))throw Error('才能必須符合80–90、70–80、60–70、50–60、50–60區間。');const s=createRealm(createLegacyWorld({...input,points:[4,4,4,4,4]}));s.persons.player.abilities=values.slice();s.persons.player.abilityGeneration='rolled-v1';return s;}
 export function createLegacyWorld(input){
  if(typeof input.name!=='string'||!input.name.trim()||input.name.trim().length>12||!['male','female'].includes(input.gender)||!Object.hasOwn(origins,input.origin)||!Object.hasOwn(cities,input.city)||!Array.isArray(input.points)||input.points.length!==5||input.points.some(n=>!Number.isInteger(n)||n<0||n>20)||input.points.reduce((a,b)=>a+b,0)!==RULES.points)throw Error('請填寫姓名（1–12字）並分配全部20點。');
  const player={id:'player',name:input.name.trim(),gender:input.gender,originId:input.origin,initialAge:RULES.startAge,cityId:input.city,travel:null,abilities:input.points.map(n=>RULES.baseAbility+n),status:'unaffiliated',alive:true};
@@ -12,7 +13,7 @@ export function createLegacyWorld(input){
 function log(s,message){s.logs.push({tick:s.tick,message});s.logs=s.logs.slice(-200);}
 export function observe(s){const p=s.persons.player;if(p.travel)return;const id=p.cityId;s.intel[id]={cityId:id,obtainedTick:s.tick,source:'親自抵達／在地見聞',confidence:'確定（取得時）',money:s.assets.public[id].money,food:s.assets.public[id].food,troops:s.assets.public[id].troops};}
 export function routeTo(s,id){const p=s.persons.player;return routes.find(r=>(r.a===p.cityId&&r.b===id)||(r.b===p.cityId&&r.a===id));}
-export function startTravel(s,id){const p=s.persons.player,r=routeTo(s,id);if(p.travel||!r)throw Error('目前無法沿此路線旅行。');if(s.assets.private.money<r.money||s.assets.private.food<r.food)throw Error('私人金錢或糧食不足。');s.assets.private.money-=r.money;s.assets.private.food-=r.food;p.travel={from:p.cityId,to:id,remaining:r.turns,total:r.turns};log(s,`出發前往${cities[id].name}，支付${r.money}錢、${r.food}糧；預計${r.turns}旬。`);}
+export function startTravel(s,id){if(s.realm?.pendingCommand)throw Error('本旬已安排主角工作，請先取消再旅行。');const p=s.persons.player,r=routeTo(s,id);if(p.travel||!r)throw Error('目前無法沿此路線旅行。');if(s.assets.private.money<r.money||s.assets.private.food<r.food)throw Error('私人金錢或糧食不足。');s.assets.private.money-=r.money;s.assets.private.food-=r.food;p.travel={from:p.cityId,to:id,remaining:r.turns,total:r.turns};log(s,`出發前往${cities[id].name}，支付${r.money}錢、${r.food}糧；預計${r.turns}旬。`);}
 export function advance(s){s.tick++;for(const p of Object.values(s.persons)){if(p.id==='player'||p.factionId)continue;const i=cityIds.indexOf(p.cityId);if((s.tick+Number(p.id.slice(-1)))%2===0){const next=cityIds[(i+1)%cityIds.length];p.cityId=next; if(s.persons.player.cityId===next&&!s.persons.player.travel)log(s,`${p.name}來到本地（原創NPC示例活動）。`);}}
  for(const id of cityIds){s.assets.public[id].money+=2;s.assets.public[id].food+=3;}
  const p=s.persons.player;if(p.travel){p.travel.remaining--;if(p.travel.remaining===0){p.cityId=p.travel.to;p.travel=null;log(s,`抵達${cities[p.cityId].name}。`);}}observe(s);log(s,'本旬結束，各地同步活動。');settleRealm(s,log);return s;}
@@ -23,7 +24,7 @@ export function validate(s){
  const num=n=>Number.isSafeInteger(n)&&n>=0&&n<=1e9;
  for(const [id,p]of Object.entries(s.persons)){if(!p||p.id!==id||typeof p.name!=='string'||p.name.length<1||p.name.length>12||!num(p.initialAge)||!Object.hasOwn(cities,p.cityId)||p.alive!==true)fail();}
  if(Object.keys(s.persons).sort().join(',')!==(s.schemaVersion===1?'npc-1,npc-2,player':'npc-1,npc-2,npc-3,player'))fail();
- const p=s.persons.player;if(!p||!['male','female'].includes(p.gender)||!Object.hasOwn(origins,p.originId)||p.status!==(s.schemaVersion===1?'unaffiliated':'ruler')||!Array.isArray(p.abilities)||p.abilities.length!==5||p.abilities.some(n=>!Number.isInteger(n)||n<40||n>60)||p.abilities.reduce((a,b)=>a+b,0)!==220)fail();
+ const p=s.persons.player;if(!p||!['male','female'].includes(p.gender)||!Object.hasOwn(origins,p.originId)||p.status!==(s.schemaVersion===1?'unaffiliated':'ruler')||!Array.isArray(p.abilities)||p.abilities.length!==5||(p.abilityGeneration==='rolled-v1'?(s.schemaVersion!==2||!validRolledAbilities(p.abilities)):(p.abilityGeneration!==undefined||p.abilities.some(n=>!Number.isInteger(n)||n<40||n>60)||p.abilities.reduce((a,b)=>a+b,0)!==220)))fail();
  if(p.travel){const t=p.travel,r=routes.find(r=>(r.a===t.from&&r.b===t.to)||(r.b===t.from&&r.a===t.to));if(!r||p.cityId!==t.from||t.total!==r.turns||!Number.isInteger(t.remaining)||t.remaining<1||t.remaining>t.total)fail();}
  for(const key of ['private','group'])for(const k of ['money','food'])if(!num(s.assets[key]?.[k]))fail();
  for(const id of cityIds)for(const k of ['money','food','troops'])if(!num(s.assets.public?.[id]?.[k]))fail();

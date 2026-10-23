@@ -22,5 +22,5 @@ const paths={
  close:'m5 5 14 14M5 19 19 5',
 };
 export function icon(name,cls=''){return `<svg class="icon ${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${paths[name]??paths.scroll}"/></svg>`;}
-export function actorClass(person){return person.id==='player'?(person.gender==='female'?'actor-female':'actor-male'):(person.id==='npc-1'?'actor-shen':'actor-male');}
+export function actorClass(person){return person.id==='player'?(person.gender==='female'?'actor-female':'actor-male'):(person.id==='npc-1'?'officer-shen':person.id==='npc-2'?'officer-du':'officer-liang');}
 export function avatar(person){return `<span class="avatar ${actorClass(person)}" aria-hidden="true"></span>`;}
